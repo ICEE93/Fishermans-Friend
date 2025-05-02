@@ -98,7 +98,7 @@ local const_min_alpha = 0.3         -- Hardcoded minimum alpha (0.0 - 1.0)
 
 local Settings = {
     is_enabled = true,
-    max_range = 140.0,                -- Default & Max Range
+    max_range = 240.0,                -- Default & Max Range
     default_line_color_base = color.white(), -- Use base color objects/tables
     use_get_all_objects = false,
     show_pool_names = true,
@@ -181,7 +181,7 @@ local FISHING_POOL_NAMES = {
 local menu_elements = {
     main_tree = menu.tree_node(),
     enable_script = menu.checkbox(Settings.is_enabled, "ff_enable"),
-    range_slider = menu.slider_float(10.0, 140.0, Settings.max_range, "ff_range"),
+    range_slider = menu.slider_float(10.0, 240.0, Settings.max_range, "ff_range"),
     use_all_objects_toggle = menu.checkbox(Settings.use_get_all_objects, "ff_use_all"),
     -- Visuals Sub-tree
     visuals_tree = menu.tree_node(),
