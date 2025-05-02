@@ -171,7 +171,7 @@ local FISHING_POOL_NAMES = {
     ["Blood in the Water"] = true, ["Bloody Perch Swarm"] = true, ["Calm Surfacing Ripple"] = true,
     ["Festering Rotpool"] = true, ["Swarm of Slum Sharks"] = true, ["Infused Ichor Spill"] = true,
     ["River Bass Pool"] = true, ["Anglerseeker Torrent"] = true, ["Stargazer Swarm"] = true,
-    ["Royal Ripple"] = true,
+    ["Royal Ripple"] = true, 
 }
 
 
@@ -301,7 +301,7 @@ local function on_render()
 
                             if obj_name == "Blood in the Water" then
                                 -- Rainbow Pulse
-                                local ratio = (current_time_ms / (const_pulse_speed_ms * 2)) % 1.0
+                                local ratio = 100
                                 base_color_obj = color.get_rainbow_color(ratio) -- For text color
                                 if base_color_obj and base_color_obj.get then
                                      local r, g, b, _ = base_color_obj:get() -- Assume 0-255 range
