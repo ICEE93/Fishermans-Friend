@@ -251,7 +251,7 @@ local function on_render()
 
                             if obj_name == "Blood in the Water" then
                                 -- Rainbow Cycle
-                                local ratio = (current_time_ms / const_rainbow_cycle_ms) % 1.0
+                                local ratio = 100
                                 final_line_color = color.get_rainbow_color(ratio)
                                 -- Fallback to base red if rainbow function fails
                                 if not final_line_color then final_line_color = COLOR_BLOOD_BASE end
