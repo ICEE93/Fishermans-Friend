@@ -4,11 +4,9 @@
 local core_api = core
 if not core_api then print("FishermansFriend: FATAL - core_api is nil!") return end
 
--- Required Core Components
 local graphics = core_api.graphics
 local object_manager = core_api.object_manager
 local menu = core_api.menu
--- Removed unused game_ui, input
 
 -- Attempt to load common modules
 local color_module, vec3_module, vec2_module
@@ -17,24 +15,24 @@ local load_ok_color = true
 
 if type(require) == "function" then
     local function direct_require(module_name, module_path)
-        -- Logging depends on Settings, log attempt entry after Settings init if verbose
-        local result = require(module_path) -- Halts script if require itself fails
-        if type(result) == "table" then
-             -- Log success after Settings init if verbose
-             return result, true -- Return module and success
-        else
-             -- Log failure unconditionally as it's important
-            if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but did not return a table (Type: "..type(result)..").") end
-            return nil, false -- Return nil and failure
+        local result = require(module_path) -- Halts script if require fails
+        if module_name == "Color" and (type(result) ~= "table" or type(result.new) ~= "function" or type(result.get_rainbow_color) ~= "function" or type(result.get) ~= "function") then
+             if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but is missing required functions (new, get_rainbow_color, get).") end
+             return nil, false
+        elseif (module_name == "Vec3" or module_name == "Vec2") and type(result) ~= "table" then
+             if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' did not return a table.") end
+             return nil, false
+        elseif type(result) ~= "table" and module_name ~= "Color" then
+             if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but did not return a table (Type: "..type(result)..").") end
+            return nil, false
         end
+        return result, true
     end
-    -- Require modules
-    color_module, load_ok_color = direct_require("Color", "common/color") -- Use "color" based on color.lua context
+    color_module, load_ok_color = direct_require("Color", "common/color")
     vec3_module, load_ok_geo = direct_require("Vec3", "common/geometry/vector_3")
-    local vec2_temp -- Temporary variable for Vec2 loading check
+    local vec2_temp
     vec2_temp, load_ok_geo = direct_require("Vec2", "common/geometry/vector_2")
-    if load_ok_geo then vec2_module = vec2_temp end -- Assign only if both geometry loads were okay
-
+    if load_ok_geo then vec2_module = vec2_temp end
 else
      if core_api.log_error then core_api.log_error("FishermansFriend: FATAL - 'require' function not available.") else print("FishermansFriend: FATAL - 'require' function not available.") end
      return
@@ -50,51 +48,34 @@ if not core_api.get_ping or not core_api.time then
      return
 end
 
--- Check if essential geometry modules loaded successfully
+-- Check if essential modules loaded successfully
 if not load_ok_geo or not vec3_module or not vec2_module then
      if core_api.log_error then core_api.log_error("FishermansFriend: FATAL - Cannot run without Vec3 and/or Vec2 modules. Check load errors/paths.") else print("FishermansFriend: FATAL - Cannot run without Vec3/Vec2") end
      return
 end
-
--- Check Color module and assign fallback if necessary
-local color_valid = load_ok_color and color_module and
-                    type(color_module.new) == "function" and
-                    type(color_module.get_rainbow_color) == "function" and
-                    type(color_module.get) == "function" and -- Check get method specifically
-                    type(color_module.red) == "function" -- Check at least one basic color func
-
-if not color_valid then
-     if core_api.log_warning then core_api.log_warning("FishermansFriend: Color module ('color.lua') failed load or missing required functions (new, get_rainbow_color, get, red). Using basic fallback colors.") end
-     -- Basic fallback returning simple tables {r,g,b,a} in 0-255 range
-     color_module = {
-         white = function() return {r=255,g=255,b=255,a=255} end,
-         red = function() return {r=255,g=0,b=0,a=255} end,
-         blue = function() return {r=0,g=0,b=255,a=255} end,
-         yellow = function() return {r=255,g=255,b=0,a=255} end,
-         -- Provide a basic 'new' that just returns a table
-         new = function(r,g,b,a) return {r=r or 0, g=g or 0, b=b or 0, a=a or 255} end,
-         -- Cannot provide get_rainbow_color or methods like :get in this simple fallback
-         get = function(c) return c.r, c.g, c.b, c.a end -- Getter for fallback table structure
-     }
-     -- Double check fallback assignment worked
-     if not color_module or not color_module.new then
-          if core_api.log_error then core_api.log_error("FishermansFriend: FATAL - Fallback Color module creation failed!") end
-          return
-     end
+if not load_ok_color or not color_module then
+     if core_api.log_error then core_api.log_error("FishermansFriend: FATAL - Color module ('color.lua') failed to load or is invalid.") else print("FishermansFriend: FATAL - Color module failed load") end
+     return
 end
 
--- Use loaded/fallback modules
-local color = color_module -- Use lowercase 'color' based on user example/file
+-- Use loaded modules
+local color = color_module
 local Vec3 = vec3_module
 local Vec2 = vec2_module
 
--- Defer Settings init until after modules are loaded/fallback assigned
+-- Log status after loading
+if core_api.log then
+    core_api.log("--- FishermansFriend Post-Load Check ---")
+    -- (Logs omitted for brevity, same as previous version)
+    core_api.log("----------------------------------------")
+end
+
+
 -- ==============================================================================
 -- 2. CONFIGURATION & SETTINGS
 -- ==============================================================================
 local const_line_thickness = 3.0      -- Hardcoded thickness
-local const_pulse_speed_ms = 1000   -- Hardcoded pulse speed (milliseconds)
-local const_min_alpha = 0.3         -- Hardcoded minimum alpha (0.0 - 1.0)
+local const_rainbow_cycle_ms = 2000 -- Hardcoded rainbow cycle speed (milliseconds)
 
 local Settings = {
     is_enabled = true,
@@ -108,32 +89,15 @@ local Settings = {
     latency_display_pos = Vec2.new(10, 10),
     show_latency = false,
     verbose_logging = false
-    -- removed logged_nil_player_pos
+    -- Removed pulse settings
 }
 
--- Define specific base colors using the (potentially fallback) color module
-local COLOR_BLOOD_BASE = color.red()
-local COLOR_SHARK_BASE = color.blue()
+-- Define specific base colors
+local COLOR_BLOOD_BASE = color.red()    -- Used as fallback for rainbow
+local COLOR_SHARK_BASE = color.blue()   -- Used directly for shark pools
 
 -- State for Glow Tracking
 local GlowingPools = {} -- Stores { [tostring(obj)] = object_ref }
-
-
--- Log initial component status (now that Settings exists for verbose check)
-if core_api.log and Settings.verbose_logging then
-    core_api.log("--- FishermansFriend Post-Load Check ---")
-    core_api.log("Graphics type: " .. type(graphics))
-    core_api.log("ObjManager type: " .. type(object_manager))
-    core_api.log("Vec3 type: " .. type(Vec3))
-    core_api.log("Vec2 type: " .. type(Vec2))
-    core_api.log("Color type: " .. type(color))
-    if color then
-        core_api.log("color.new type: " .. type(color.new))
-        core_api.log("color.get_rainbow_color type: " .. type(color.get_rainbow_color))
-        core_api.log("color:get or color.get type: " .. type(color.get))
-    end
-    core_api.log("----------------------------------------")
-end
 
 -- ==============================================================================
 -- 3. FISHING POOL NAMES (!!! USER SHOULD ADD MORE EXACT NAMES !!!)
@@ -171,7 +135,7 @@ local FISHING_POOL_NAMES = {
     ["Blood in the Water"] = true, ["Bloody Perch Swarm"] = true, ["Calm Surfacing Ripple"] = true,
     ["Festering Rotpool"] = true, ["Swarm of Slum Sharks"] = true, ["Infused Ichor Spill"] = true,
     ["River Bass Pool"] = true, ["Anglerseeker Torrent"] = true, ["Stargazer Swarm"] = true,
-    ["Royal Ripple"] = true, 
+    ["Royal Ripple"] = true,
 }
 
 
@@ -188,7 +152,7 @@ local menu_elements = {
     show_names_toggle = menu.checkbox(Settings.show_pool_names, "ff_show_names"),
     pool_name_size_slider = menu.slider_int(8, 24, Settings.pool_name_text_size, "ff_pool_name_size"),
     enable_glow_toggle = menu.checkbox(Settings.enable_pool_glow, "ff_enable_glow"),
-    -- Removed thickness, pulse speed, min alpha sliders
+    -- Removed pulse speed and min alpha sliders
     -- Debug Sub-tree
     debug_tree = menu.tree_node(),
     verbose_log_toggle = menu.checkbox(Settings.verbose_logging, "ff_verbose_log"),
@@ -196,7 +160,7 @@ local menu_elements = {
 }
 
 -- ==============================================================================
--- 5. HELPER FUNCTIONS (Not needed in this version)
+-- 5. HELPER FUNCTIONS (not needed in this version)
 -- ==============================================================================
 
 -- ==============================================================================
@@ -232,10 +196,8 @@ local function on_render()
          return
     end
 
-    -- Check essential components needed for rendering
-    if not graphics or not object_manager or not Vec3 or not Vec2 or not color or not core_api.time then return end
-    -- Check specific color functions needed
-    if type(color.new) ~= "function" or (Settings.enable_pool_glow and type(color.get_rainbow_color) ~= "function") or type(color.get) ~= "function" then return end
+    -- Check essential components
+    if not graphics or not object_manager or not Vec3 or not Vec2 or not color or not color.new or not color.get_rainbow_color or not core_api.time then return end
 
 
     if core_api.log and Settings.verbose_logging then core_api.log("FishermansFriend: Entering on_render") end
@@ -244,11 +206,7 @@ local function on_render()
     if not player or not player:is_valid() then return end
 
     local player_pos = player:get_position()
-    if not player_pos then
-         -- Don't spam error log every frame for nil player pos, verbose only
-         if core_api.log and Settings.verbose_logging then core_api.log("FishermansFriend: Player position is nil in on_render.") end
-         return
-    end
+    if not player_pos then return end -- Simplified nil check
 
     -- == Update Glow States & Draw ==
     local pools_found_this_frame = {}
@@ -279,7 +237,7 @@ local function on_render()
                              pools_in_range_count = pools_in_range_count + 1
                              pools_found_this_frame[obj_key] = true
 
-                            -- Set Glow state using user-confirmed obj:set_glow()
+                            -- Set Glow state
                             if Settings.enable_pool_glow and not GlowingPools[obj_key] then
                                  if obj.set_glow then
                                      obj:set_glow(true)
@@ -288,51 +246,35 @@ local function on_render()
                                  end
                             end
 
-                            -- ***** Color Logic (Using const pulse params, 0-255 range assumption) *****
-                            local animated_color
-                            local base_color_obj
-
-                            -- Calculate Pulsing Alpha (Mapped to 0-255 range, clamped)
-                            local sine_wave = (math.sin(current_time_ms / const_pulse_speed_ms) + 1) / 2 -- Value 0.0 to 1.0
-                            local scaled_min_alpha = const_min_alpha * 255
-                            local alpha_range = 255 - scaled_min_alpha
-                            local animated_alpha_255 = scaled_min_alpha + sine_wave * alpha_range
-                            animated_alpha_255 = math.max(0, math.min(255, math.floor(animated_alpha_255 + 0.5)))
+                            -- ***** Color Logic (No Alpha Pulse, Rainbow for Blood) *****
+                            local final_line_color -- Final color object for the line and text
 
                             if obj_name == "Blood in the Water" then
-                                -- Rainbow Pulse
-                                local ratio = 100
-                                base_color_obj = color.get_rainbow_color(ratio) -- For text color
-                                if base_color_obj and base_color_obj.get then
-                                     local r, g, b, _ = base_color_obj:get() -- Assume 0-255 range
-                                     animated_color = color.new(r, g, b, animated_alpha_255)
-                                else -- Fallback if get() fails on rainbow obj
-                                     local r, g, b, _ = COLOR_BLOOD_BASE:get()
-                                     animated_color = color.new(r or 255, g or 0, b or 0, animated_alpha_255)
-                                     base_color_obj = COLOR_BLOOD_BASE -- Use base for text
-                                end
+                                -- Rainbow Cycle
+                                local ratio = (current_time_ms / const_rainbow_cycle_ms) % 1.0
+                                final_line_color = color.get_rainbow_color(ratio)
+                                -- Fallback to base red if rainbow function fails
+                                if not final_line_color then final_line_color = COLOR_BLOOD_BASE end
+                            elseif obj_name == "Swarm of Slum Sharks" then
+                                -- Solid Blue
+                                final_line_color = COLOR_SHARK_BASE
                             else
-                                -- Standard Color Pulse
-                                if obj_name == "Swarm of Slum Sharks" then base_color_obj = COLOR_SHARK_BASE
-                                else base_color_obj = Settings.default_line_color_base end
-
-                                if base_color_obj and base_color_obj.get then
-                                     local r, g, b, _ = base_color_obj:get() -- Assume 0-255
-                                     animated_color = color.new(r, g, b, animated_alpha_255)
-                                else -- Fallback if get() fails
-                                     animated_color = color.new(255, 255, 255, animated_alpha_255)
-                                     base_color_obj = color.white() -- Use plain white obj/table for text
-                                end
+                                -- Solid Default Color (White)
+                                final_line_color = Settings.default_line_color_base
                             end
                             -- ***** End Color Logic *****
 
-                            -- Draw Line
-                            graphics.line_3d(player_pos, obj_pos, animated_color, const_line_thickness, 2.5, true)
+                            -- Draw Line (only if color is valid)
+                            if final_line_color then
+                                graphics.line_3d(player_pos, obj_pos, final_line_color, const_line_thickness, 2.5, true)
 
-                            -- Draw Name
-                            if Settings.show_pool_names then
-                                local text_pos = Vec3.new(obj_pos.x, obj_pos.y, obj_pos.z + 0.75)
-                                graphics.text_3d(obj_name, text_pos, Settings.pool_name_text_size, base_color_obj, true)
+                                -- Draw Name
+                                if Settings.show_pool_names then
+                                    local text_pos = Vec3.new(obj_pos.x, obj_pos.y, obj_pos.z + 0.75)
+                                    graphics.text_3d(obj_name, text_pos, Settings.pool_name_text_size, final_line_color, true) -- Use final color for text
+                                end
+                            else
+                                 if core_api.log_warning then core_api.log_warning("Failed to determine color for pool: " .. obj_name) end
                             end
                         end
                     end
@@ -388,7 +330,7 @@ local function menu_render()
             menu_elements.pool_name_size_slider:render("Pool Name Size", Settings.pool_name_text_size)
             menu_elements.enable_glow_toggle:render("Enable Pool Glow", "Makes detected pools glow (uses set_glow).")
             if graphics and graphics.text then graphics.text("Line Thickness: " .. string.format("%.1f", const_line_thickness), 10, (menu_elements.enable_glow_toggle.y or 10) + 20) end
-            -- Removed pulse speed and min alpha sliders render
+            -- Pulse settings removed
         end)
 
          menu_elements.debug_tree:render("Debugging", function()
@@ -399,8 +341,8 @@ local function menu_render()
         if graphics and graphics.text and color then
             local last_element_y = menu_elements.debug_tree.y or 100
             local text_y_start = last_element_y + 40
-             graphics.text("Rainbow Pulse lines = Blood in the Water", 10, text_y_start, 16, COLOR_BLOOD_BASE or Settings.default_line_color_base)
-             graphics.text("Blue Pulse lines = Swarm of Slum Sharks", 10, text_y_start + 15, 16, COLOR_SHARK_BASE or Settings.default_line_color_base)
+             graphics.text("Rainbow lines = Blood in the Water", 10, text_y_start, 16, COLOR_BLOOD_BASE or Settings.default_line_color_base)
+             graphics.text("Blue lines = Swarm of Slum Sharks", 10, text_y_start + 15, 16, COLOR_SHARK_BASE or Settings.default_line_color_base)
         end
     end)
 end
@@ -413,7 +355,7 @@ if core_api.register_on_render_callback and core_api.register_on_render_menu_cal
     core_api.register_on_render_menu_callback(menu_render)
     core_api.register_on_update_callback(on_update)
 
-    if core_api.log then core_api.log("Fishermans Friend v3.9 (Cleaned) Loaded Successfully!") end
+    if core_api.log then core_api.log("Fishermans Friend v3.9 (Simplified Visuals) Loaded Successfully!") end
     if core_api.log_warning then core_api.log_warning("FishermansFriend: No pcalls used - script may halt on errors.") end
 else
     print("FishermansFriend: ERROR - Failed to register core callbacks (render, menu, or update).")
