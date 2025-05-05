@@ -16,9 +16,33 @@ local color_module, vec3_module, vec2_module
 local load_ok_geo = true
 local load_ok_color = true
 
+
+
 -- Forward declare Settings table for use in direct_require
 local Settings = {}
 
+-- Attempt to load buff manager and enums for cleanse logic
+local buff_manager_api, enums_api
+if type(require) == "function" then
+    local load_ok_buff_mgr, bm_temp = pcall(require, "common/modules/buff_manager")
+    if load_ok_buff_mgr and type(bm_temp) == "table" then
+        buff_manager_api = bm_temp
+        if core_api.log then core_api.log("FishermansFriend: OK Loaded 'common/modules/buff_manager'.") end
+    else
+        if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load 'common/modules/buff_manager'. Error: " .. tostring(bm_temp)) end
+    end
+
+    local load_ok_enums, enums_temp = pcall(require, "common/enums")
+    if load_ok_enums and type(enums_temp) == "table" then
+        enums_api = enums_temp
+        if core_api.log then core_api.log("FishermansFriend: OK Loaded 'common/enums'.") end
+    else
+         if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load 'common/enums'. Error: " .. tostring(enums_temp)) end
+    end
+else
+     if core_api.log_error then core_api.log_error("FishermansFriend: Cannot load buff_manager/enums - 'require' function not available.") end
+end
+-- *** END OF ADDED BLOCK ***
 if type(require) == "function" then
     local function direct_require(module_name, module_path)
         if core_api.log then core_api.log("FishermansFriend: Loading '".. module_path .."'...") end
@@ -137,7 +161,7 @@ local next_cast_schedule_time = 0
 
 -- !!! VERIFY THESE FISHING SPELL IDS - ORDER HIGHEST RANK TO LOWEST !!!
 local FISHING_SPELL_IDS = {
-    372000, 200000, 131474, 51294, 7620, 7731, 7732,
+ 131474, 88868, 18248, 51294, 33095, 7620, 7731, 7732,
 }
 
 -- Populate Settings table now that modules are loaded
@@ -331,39 +355,32 @@ local function on_update()
      local is_channeling_now = player:is_channelling_spell()
      local is_moving = player:is_moving()
 
-     -- == Cleanse Logic with Debugging ==
-     if Settings.enable_cleanse_ghoulfish and current_time > last_cleanse_attempt_time + const_cleanse_cooldown then
-        if core_api.log then core_api.log("DEBUG Cleanse: Checking for Ghoulfish Curse...") end
-        last_cleanse_attempt_time = current_time -- Update time even if check fails or debuff not found
+ -- == Cleanse Logic (Using Buff Manager) ==
+ if Settings.enable_cleanse_ghoulfish and current_time > last_cleanse_attempt_time + const_cleanse_cooldown then
+    if core_api.log and Settings.verbose_logging then core_api.log("DEBUG Cleanse: Checking for Ghoulfish Curse...") end
+    last_cleanse_attempt_time = current_time -- Update time even if check fails
 
-        if player.get_debuffs then
-            local debuffs = player:get_debuffs()
-            if debuffs then
-                 local found_curse = false
-                 if core_api.log then core_api.log("DEBUG Cleanse: Found " .. #debuffs .. " debuffs.") end
-                 for i, debuff in ipairs(debuffs) do
-                     if debuff and debuff.id then
-                         if core_api.log and Settings.verbose_logging then core_api.log("DEBUG Cleanse: Checking debuff #"..i.." ID: " .. tostring(debuff.id)) end
-                         if debuff.id == {456216} then
-                             if core_api.log then core_api.log("DEBUG Cleanse: Ghoulfish Curse FOUND (ID: " .. const_ghoulfish_curse_id .. ")! Attempting to use item ID: " .. const_cursed_ghoulfish_item_id) end
-                             input.use_item(const_cursed_ghoulfish_item_id)
-                             if core_api.log then core_api.log("DEBUG Cleanse: input.use_item called.") end
-                             found_curse = true
-                             break -- Exit loop once curse is found and item is used
-                         end
-                     end
-                 end
-                 if core_api.log and not found_curse then core_api.log("DEBUG Cleanse: Ghoulfish Curse (ID: "..const_ghoulfish_curse_id..") was NOT found in the debuff list.") end
-            else
-                 if core_api.log then core_api.log("DEBUG Cleanse: player:get_debuffs() returned nil or empty table.") end
-            end
-        else
-             if core_api.log_warning and not Settings.logged_missing_debuff_func then
-                  core_api.log_warning("FishermansFriend: Cannot check debuffs - player:get_debuffs() function not found.")
-                  Settings.logged_missing_debuff_func = true
-             end
+    -- Check if buff_manager was loaded successfully
+    if not buff_manager_api or type(buff_manager_api.get_debuff_data) ~= 'function' then
+        if core_api.log_warning and not Settings.logged_missing_buff_mgr then
+             core_api.log_warning("FishermansFriend: Cannot check debuffs - buff_manager module not loaded or invalid.")
+             Settings.logged_missing_buff_mgr = true -- Log once per session
         end
-     end -- End Cleanse Logic
+    else
+        -- Use buff_manager to check for the debuff by ID
+        -- NOTE: get_debuff_data expects a TABLE of IDs, even if it's just one ID.
+        local debuff_data = buff_manager_api:get_debuff_data(player, {456216})
+
+        -- Check the is_active field from the returned data
+        if debuff_data and debuff_data.is_active then
+            if core_api.log then core_api.log("DEBUG Cleanse: Ghoulfish Curse FOUND (ID: " .. const_ghoulfish_curse_id .. ")! Using buff_manager. Attempting to use item ID: " .. const_cursed_ghoulfish_item_id) end
+            input.use_item(const_cursed_ghoulfish_item_id)
+            if core_api.log then core_api.log("DEBUG Cleanse: input.use_item called.") end
+        else
+             if core_api.log and Settings.verbose_logging then core_api.log("DEBUG Cleanse: Ghoulfish Curse (ID: "..const_ghoulfish_curse_id..") was NOT active according to buff_manager.") end
+        end
+    end
+ end -- End Cleanse Logic
 
      -- == Find Closest Bobber within 30 yards ==
      local closest_bobber_nearby = nil
