@@ -132,6 +132,8 @@ local const_bobber_max_range = 30.0 -- Max range in yards to check for bobbers
 local const_bobber_max_range_sq = const_bobber_max_range * const_bobber_max_range -- Squared for efficiency
 local const_FISHING_CHANNEL_SPELL_ID = 131474 -- <<< ** VERIFY THIS IS CORRECT FOR YOUR VERSION **
 local const_catch_delay_ms = 0.700 -- Fixed delay between detection and click
+-- Add this new state variable for scheduled casting
+local next_cast_schedule_time = 0
 
 -- !!! VERIFY THESE FISHING SPELL IDS - ORDER HIGHEST RANK TO LOWEST !!!
 local FISHING_SPELL_IDS = {
@@ -342,7 +344,7 @@ local function on_update()
                  for i, debuff in ipairs(debuffs) do
                      if debuff and debuff.id then
                          if core_api.log and Settings.verbose_logging then core_api.log("DEBUG Cleanse: Checking debuff #"..i.." ID: " .. tostring(debuff.id)) end
-                         if debuff.id == {const_ghoulfish_curse_id} then
+                         if debuff.id == {456216} then
                              if core_api.log then core_api.log("DEBUG Cleanse: Ghoulfish Curse FOUND (ID: " .. const_ghoulfish_curse_id .. ")! Attempting to use item ID: " .. const_cursed_ghoulfish_item_id) end
                              input.use_item(const_cursed_ghoulfish_item_id)
                              if core_api.log then core_api.log("DEBUG Cleanse: input.use_item called.") end
@@ -417,24 +419,34 @@ local function on_update()
 
          -- If pending, check timer and execute click
          if catch_click_pending and current_time >= catch_click_trigger_time then
+                -- Check if the bobber is still valid before clicking
              if core_api.log then core_api.log("DEBUG: Catch click timer triggered.") end
              local bobber_to_use = catch_click_bobber_target
 
              -- No player busy check here per user request (click regardless)
+
              if bobber_to_use and bobber_to_use:is_valid() then
-                 if core_api.log then core_api.log("DEBUG: Stored bobber is valid. Calling input.use_object...") end
-                 input.use_object(bobber_to_use) -- Using use_object
-                 if core_api.log then core_api.log("DEBUG: input.use_object called.") end
+                if core_api.log then core_api.log("DEBUG: Stored bobber is valid. Calling input.use_object...") end
+                input.use_object(bobber_to_use) -- Using use_object [cite: 80]
+                if core_api.log then core_api.log("DEBUG: input.use_object called.") end
+
+                -- *** ADD THIS BLOCK ***
+                -- If auto-cast is enabled, schedule the next cast 0.7 seconds from now
+                if Settings.enable_auto_cast then
+                    next_cast_schedule_time = current_time + 1 -- Schedule 700ms (0.7s) later [cite: 23]
+                    if core_api.log then core_api.log("DEBUG: Bobber used. Scheduling next auto-cast in 700ms.") end
+                end
+                -- *** END OF ADDED BLOCK ***
              else
                  if core_api.log then core_api.log("DEBUG: Stored bobber was nil or invalid when click timer triggered.") end
              end
-             -- Always reset state after timer fires (whether click succeeded or bobber was invalid)
-             catch_click_pending = false
-             catch_click_trigger_time = 0
-             catch_click_bobber_target = nil
-             if core_api.log then core_api.log("DEBUG: Resetting catch click state.") end
-         end
-     else
+            -- Always reset state after timer fires
+            catch_click_pending = false
+            catch_click_trigger_time = 0
+            catch_click_bobber_target = nil
+            if core_api.log then core_api.log("DEBUG: Resetting catch click state.") end
+        end
+    else
           -- Ensure state is reset if auto-catch is disabled
          if catch_click_pending then
              catch_click_pending = false
@@ -444,21 +456,48 @@ local function on_update()
      end -- End Auto Catch Logic block
 
 
-     -- == Auto Cast Logic (Continuous Recast) ==
-     if Settings.enable_auto_cast then
-        -- Check if player is idle (not casting anything, not channeling anything, not moving) and cooldown is met
-        if not is_casting_now and not is_channeling_now and not is_moving and current_time > last_auto_cast_attempt_time + const_auto_cast_cooldown then
-            -- Don't need to check for bobber anymore, just cast if idle
-            local spell_id_to_cast = get_best_fishing_spell()
-            if spell_id_to_cast then
-                if core_api.log then core_api.log("DEBUG: Player idle. Found usable Fishing spell ID: " .. spell_id_to_cast .. ". Attempting auto-cast.") end
-                input.cast_target_spell(spell_id_to_cast, player) -- Cast on self
-                last_auto_cast_attempt_time = current_time -- Start cooldown
-            else
-                if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: No usable fishing spell found to auto-cast.") end
-                last_auto_cast_attempt_time = current_time + 5000 -- Add 5 sec cooldown if no spell found
-            end
+       -- == Auto Cast Logic (Handles Scheduled & Idle Recasts) ==
+       if Settings.enable_auto_cast then
+        local should_try_cast = false
+        local reason = ""
+
+        -- Check if a scheduled cast is due
+        if next_cast_schedule_time > 0 and current_time >= next_cast_schedule_time then
+            should_try_cast = true
+            reason = "Scheduled cast time met."
+            next_cast_schedule_time = 0 -- Consume the schedule
+        -- Else, check if regular idle cast is due (and no schedule is pending)
+        elseif next_cast_schedule_time == 0 and current_time > last_auto_cast_attempt_time + const_auto_cast_cooldown then
+            should_try_cast = true
+            reason = "Idle cast cooldown met."
         end
+
+        -- If we should try casting, check if player is ready
+        if should_try_cast then
+            if not is_casting_now and not is_channeling_now and not is_moving then
+                local spell_id_to_cast = get_best_fishing_spell()
+                if spell_id_to_cast then
+                    if core_api.log then core_api.log("DEBUG: Player ready. " .. reason .. " Attempting auto-cast of spell ID: " .. spell_id_to_cast) end
+                    input.cast_target_spell(spell_id_to_cast, player) -- Cast on self [cite: 51, 52, 53, 54]
+                    last_auto_cast_attempt_time = current_time -- Update last attempt time to reset cooldown
+                else
+                    if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: " .. reason .. " No usable fishing spell found to auto-cast.") end
+                    last_auto_cast_attempt_time = current_time + 5 -- Add delay if no spell found
+                end
+            else
+                -- Player was busy when cast was attempted (either scheduled or idle)
+                if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: " .. reason .. " Player busy (casting/channeling/moving). Auto-cast skipped.") end
+                -- Reset last attempt time so it can try again on the next available tick after cooldown
+                last_auto_cast_attempt_time = current_time
+            end
+        -- Added check: If a cast was scheduled but player was busy when the time came, clear the schedule anyway
+        elseif next_cast_schedule_time > 0 and current_time >= next_cast_schedule_time then
+             if core_api.log then core_api.log("DEBUG: Scheduled cast time met, but couldn't cast (player busy?). Clearing schedule.") end
+             next_cast_schedule_time = 0 -- Clear schedule if missed
+        end
+    else
+        -- Ensure schedule is cleared if auto cast gets disabled
+        next_cast_schedule_time = 0
     end -- End Auto Cast Logic block
 
 end
