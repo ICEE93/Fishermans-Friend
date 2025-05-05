@@ -131,7 +131,7 @@ local const_auto_cast_cooldown = 1500 -- Cooldown in ms after attempting an auto
 local const_bobber_max_range = 30.0 -- Max range in yards to check for bobbers
 local const_bobber_max_range_sq = const_bobber_max_range * const_bobber_max_range -- Squared for efficiency
 local const_FISHING_CHANNEL_SPELL_ID = 131474 -- <<< ** VERIFY THIS IS CORRECT FOR YOUR VERSION **
-local const_catch_delay_ms = 0.400 -- Fixed delay between detection and click
+local const_catch_delay_ms = 0.700 -- Fixed delay between detection and click
 
 -- !!! VERIFY THESE FISHING SPELL IDS - ORDER HIGHEST RANK TO LOWEST !!!
 local FISHING_SPELL_IDS = {
@@ -342,7 +342,7 @@ local function on_update()
                  for i, debuff in ipairs(debuffs) do
                      if debuff and debuff.id then
                          if core_api.log and Settings.verbose_logging then core_api.log("DEBUG Cleanse: Checking debuff #"..i.." ID: " .. tostring(debuff.id)) end
-                         if debuff.id == const_ghoulfish_curse_id then
+                         if debuff.id == {const_ghoulfish_curse_id} then
                              if core_api.log then core_api.log("DEBUG Cleanse: Ghoulfish Curse FOUND (ID: " .. const_ghoulfish_curse_id .. ")! Attempting to use item ID: " .. const_cursed_ghoulfish_item_id) end
                              input.use_item(const_cursed_ghoulfish_item_id)
                              if core_api.log then core_api.log("DEBUG Cleanse: input.use_item called.") end
@@ -444,27 +444,22 @@ local function on_update()
      end -- End Auto Catch Logic block
 
 
-     -- == Auto Cast Logic ==
+     -- == Auto Cast Logic (Continuous Recast) ==
      if Settings.enable_auto_cast then
-         -- Check if player is idle (not casting anything, not channeling anything, not moving) and cooldown is met
-         if not is_casting_now and not is_channeling_now and not is_moving and current_time > last_auto_cast_attempt_time + const_auto_cast_cooldown then
-             -- Cast only if no bobber was found within 30 yards this tick
-             if not closest_bobber_nearby then
-                 local spell_id_to_cast = get_best_fishing_spell()
-                 if spell_id_to_cast then
-                     if core_api.log then core_api.log("DEBUG: No bobber nearby. Found usable Fishing spell ID: " .. spell_id_to_cast .. ". Attempting auto-cast.") end
-                     input.cast_target_spell(spell_id_to_cast, player) -- Cast on self
-                     last_auto_cast_attempt_time = current_time -- Start cooldown
-                 else
-                     if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: No usable fishing spell found to auto-cast.") end
-                     last_auto_cast_attempt_time = current_time + 5000 -- Add 5 sec cooldown if no spell found
-                 end
-             else
-                 if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: Closest bobber is within range, skipping auto-cast.") end
-                 last_auto_cast_attempt_time = current_time -- Reset cooldown timer slightly
-             end
-         end
-     end -- End Auto Cast Logic block
+        -- Check if player is idle (not casting anything, not channeling anything, not moving) and cooldown is met
+        if not is_casting_now and not is_channeling_now and not is_moving and current_time > last_auto_cast_attempt_time + const_auto_cast_cooldown then
+            -- Don't need to check for bobber anymore, just cast if idle
+            local spell_id_to_cast = get_best_fishing_spell()
+            if spell_id_to_cast then
+                if core_api.log then core_api.log("DEBUG: Player idle. Found usable Fishing spell ID: " .. spell_id_to_cast .. ". Attempting auto-cast.") end
+                input.cast_target_spell(spell_id_to_cast, player) -- Cast on self
+                last_auto_cast_attempt_time = current_time -- Start cooldown
+            else
+                if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: No usable fishing spell found to auto-cast.") end
+                last_auto_cast_attempt_time = current_time + 5000 -- Add 5 sec cooldown if no spell found
+            end
+        end
+    end -- End Auto Cast Logic block
 
 end
 
