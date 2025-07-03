@@ -20,6 +20,8 @@ local load_ok_color = true
 
 -- Forward declare Settings table for use in direct_require
 local Settings = {}
+---@return number
+local role = core.get_user_role_flags()
 
 -- Attempt to load buff manager and enums for cleanse logic
 local buff_manager_api, enums_api
@@ -27,25 +29,25 @@ if type(require) == "function" then
     local load_ok_buff_mgr, bm_temp = pcall(require, "common/modules/buff_manager")
     if load_ok_buff_mgr and type(bm_temp) == "table" then
         buff_manager_api = bm_temp
-        if core_api.log then core_api.log("FishermansFriend: OK Loaded 'common/modules/buff_manager'.") end
+       -- if core_api.log then core_api.log("FishermansFriend: OK Loaded 'common/modules/buff_manager'.") end
     else
-        if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load 'common/modules/buff_manager'. Error: " .. tostring(bm_temp)) end
+      --  if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load 'common/modules/buff_manager'. Error: " .. tostring(bm_temp)) end
     end
 
     local load_ok_enums, enums_temp = pcall(require, "common/enums")
     if load_ok_enums and type(enums_temp) == "table" then
         enums_api = enums_temp
-        if core_api.log then core_api.log("FishermansFriend: OK Loaded 'common/enums'.") end
+       -- if core_api.log then core_api.log("FishermansFriend: OK Loaded 'common/enums'.") end
     else
-         if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load 'common/enums'. Error: " .. tostring(enums_temp)) end
+       --  if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load 'common/enums'. Error: " .. tostring(enums_temp)) end
     end
 else
-     if core_api.log_error then core_api.log_error("FishermansFriend: Cannot load buff_manager/enums - 'require' function not available.") end
+    -- if core_api.log_error then core_api.log_error("FishermansFriend: Cannot load buff_manager/enums - 'require' function not available.") end
 end
 -- *** END OF ADDED BLOCK ***
 if type(require) == "function" then
     local function direct_require(module_name, module_path)
-        if core_api.log then core_api.log("FishermansFriend: Loading '".. module_path .."'...") end
+     --   if core_api.log then core_api.log("FishermansFriend: Loading '".. module_path .."'...") end
         local status, result = pcall(require, module_path)
         if not status then
              if core_api.log_error then core_api.log_error("FishermansFriend: FAILED to load module '" .. module_path .. "'. Error: " .. tostring(result)) else print("FishermansFriend: FAILED to load module '" .. module_path .. "'. Error: " .. tostring(result)) end
@@ -55,24 +57,24 @@ if type(require) == "function" then
         local required_funcs_ok = true
         if module_name == "Color" then
             if type(result) ~= "table" or type(result.new) ~= "function" or type(result.get_rainbow_color) ~= "function" or type(result.get) ~= "function" or type(result.red) ~= "function" then
-                 if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but is missing required Color functions/structure.") end
+               --  if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but is missing required Color functions/structure.") end
                  required_funcs_ok = false
             end
         elseif (module_name == "Vec3" or module_name == "Vec2") then
              if type(result) ~= "table" then
-                 if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' did not return a table. Type: "..type(result)) end
+                -- if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' did not return a table. Type: "..type(result)) end
                  required_funcs_ok = false
             elseif type(result.new) ~= "function" then
-                 if core_api.log_warning then core_api.log_warning("FishermansFriend: "..module_name.." module loaded but missing .new function.") end
+              --   if core_api.log_warning then core_api.log_warning("FishermansFriend: "..module_name.." module loaded but missing .new function.") end
                  required_funcs_ok = false
             end
         elseif type(result) ~= "table" and module_name ~= "Color" then
-             if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but did not return a table (Type: "..type(result)..").") end
+           --  if core_api.log_warning then core_api.log_warning("FishermansFriend: Module '" .. module_path .. "' loaded but did not return a table (Type: "..type(result)..").") end
             required_funcs_ok = false
         end
 
         if required_funcs_ok then
-             if core_api.log then core_api.log("FishermansFriend: OK Loaded '".. module_path .."'.") end
+          --   if core_api.log then core_api.log("FishermansFriend: OK Loaded '".. module_path .."'.") end
              return result, true
         else
              if core_api.log_error then core_api.log_error("FishermansFriend: Module '" .. module_path .. "' failed validation.") else print("FishermansFriend: Module '" .. module_path .. "' failed validation.") end
@@ -136,11 +138,11 @@ end
 
 -- Log status after loading
 if core_api.log then
-    core_api.log("--- FishermansFriend Post-Load Check ---")
-    core_api.log("Input type: " .. type(input))
-    core_api.log("SpellBook type: " .. type(spell_book))
-    core_api.log("Vec3 type (variable): " .. type(Vec3))
-    core_api.log("----------------------------------------")
+  --  core_api.log("--- FishermansFriend Post-Load Check ---")
+  --  core_api.log("Input type: " .. type(input))
+  --  core_api.log("SpellBook type: " .. type(spell_book))
+  --  core_api.log("Vec3 type (variable): " .. type(Vec3))
+  --  core_api.log("----------------------------------------")
 end
 
 
@@ -197,14 +199,31 @@ local last_cleanse_attempt_time = 0
 
 -- State for auto-cast
 local last_auto_cast_attempt_time = 0
+local is_looting = false
+local loot_check_time = 0
+local last_loot_count = 0
+local LOOT_CHECK_DELAY = 200 -- ms between loot attempts
 
 -- State variables for the fixed 200ms auto-catch delay
 local catch_click_pending = false
 local catch_click_trigger_time = 0
 local catch_click_bobber_target = nil
 
+-- List of known fishing bobber names
+local FISHING_BOBBER_NAMES = {
+    ["Fishing Bobber"] = true,  -- Default English
+    ["Angelhaken"] = true,      -- German
+    ["Appât"] = true,          -- French
+    ["Anzuelo de pesca"] = true, -- Spanish
+    ["Amo da pesca"] = true,   -- Italian
+    ["Блесна"] = true,         -- Russian
+    ["낚시찌"] = true,          -- Korean
+    ["钓鱼浮漂"] = true,        -- Simplified Chinese
+    ["釣魚浮標"] = true         -- Traditional Chinese
+}
+
 -- ==============================================================================
--- 3. FISHING POOL NAMES
+-- 3. FISHING POOL AND BOBBER NAMES
 -- ==============================================================================
 local FISHING_POOL_NAMES = {
     ["Floating Wreckage"] = true, ["School of Tastyfish"] = true, ["School of Deviate Fish"] = true,
@@ -249,7 +268,7 @@ local menu_elements = {
     main_tree = menu.tree_node(),
     enable_script = menu.checkbox(Settings.is_enabled, "ff_enable"),
     range_slider = menu.slider_float(10.0, 240.0, Settings.max_range, "ff_range"),
-    use_all_objects_toggle = menu.checkbox(Settings.use_get_all_objects, "ff_use_all"),
+    --use_all_objects_toggle = menu.checkbox(Settings.use_get_all_objects, "ff_use_all"),
     -- Visuals Sub-tree
     visuals_tree = menu.tree_node(),
     show_names_toggle = menu.checkbox(Settings.show_pool_names, "ff_show_names"),
@@ -271,40 +290,60 @@ local menu_elements = {
 -- ==============================================================================
 local function find_closest_bobber_in_range(player_pos_vec3) -- Expecting a Vec3 object
     if not player_pos_vec3 or type(player_pos_vec3.squared_dist_to) ~= 'function' then
-        if core_api.log then core_api.log("DEBUG ERROR: Invalid player_pos_vec3 passed to find_closest_bobber_in_range!") end
+        if core_api.log and Settings.verbose_logging then 
+            core_api.log("DEBUG: Invalid player_pos_vec3 passed to find_closest_bobber_in_range") 
+        end
         return nil
     end
 
-    local visible_objects = object_manager.get_visible_objects()
-    if not visible_objects then return nil end
+    local success, visible_objects = pcall(function()
+        return object_manager.get_visible_objects()
+    end)
+    
+    if not success or not visible_objects then 
+        if core_api.log and Settings.verbose_logging then
+            core_api.log("DEBUG: Failed to get visible objects: " .. tostring(visible_objects))
+        end
+        return nil 
+    end
 
     local closest_bobber = nil
     local min_dist_sq = -1
 
     for _, obj in ipairs(visible_objects) do
-        -- Chain conditions with 'and' for efficiency and clarity
-        if obj and obj:is_valid() and obj.get_name and obj:get_name() == "Fishing Bobber" then
-            local bobber_pos_table = obj:get_position()
-            if bobber_pos_table and bobber_pos_table.x and bobber_pos_table.y and bobber_pos_table.z then
-                local bobber_pos_vec3 = Vec3.new(bobber_pos_table.x, bobber_pos_table.y, bobber_pos_table.z)
+        -- Use pcall to safely check object validity
+        local is_valid, obj_name = pcall(function()
+            if not obj or not obj.is_valid or not obj:is_valid() or not obj.get_name then
+                return nil
+            end
+            return obj:get_name()
+        end)
+
+        -- Check if we got a valid bobber name
+        if is_valid and obj_name and FISHING_BOBBER_NAMES[obj_name] then
+            -- Safely get position
+            local success_pos, pos = pcall(function()
+                return obj.get_position and obj:get_position()
+            end)
+
+            if success_pos and pos and pos.x and pos.y and pos.z then
+                local bobber_pos_vec3 = Vec3.new(pos.x, pos.y, pos.z)
                 if bobber_pos_vec3 and type(bobber_pos_vec3.squared_dist_to) == 'function' then
                     local dist_sq = player_pos_vec3:squared_dist_to(bobber_pos_vec3)
                     if dist_sq <= const_bobber_max_range_sq then
-                         -- Found a valid bobber within range, check if it's the closest
+                        -- Found a valid bobber within range, check if it's the closest
                         if min_dist_sq < 0 or dist_sq < min_dist_sq then
                             min_dist_sq = dist_sq
                             closest_bobber = obj
                         end
                     end -- end range check
                 end -- end Vec3 valid check
-            end -- end position table check
-        end -- end valid bobber check
-    end -- end loop
+            end -- end position check
+        end -- end name check
+    end -- end for loop
 
     return closest_bobber
 end
-
-
 -- ==============================================================================
 -- 6. HELPER FUNCTION - Get Best Fishing Spell
 -- ==============================================================================
@@ -386,18 +425,40 @@ local function on_update()
      local closest_bobber_nearby = nil
      -- Search only if auto-catch or auto-cast might need it
      if Settings.enable_auto_catch or Settings.enable_auto_cast then
-         closest_bobber_nearby = find_closest_bobber_in_range(player_pos_vec3)
+         local success, result = pcall(function()
+             return find_closest_bobber_in_range(player_pos_vec3)
+         end)
+         if success then
+             closest_bobber_nearby = result
+         else
+             if core_api.log and Settings.verbose_logging then 
+                 core_api.log("ERROR in find_closest_bobber_in_range: " .. tostring(result))
+             end
+             closest_bobber_nearby = nil
+         end
      end
 
      -- == Auto Catch Logic (Fixed 200ms Delay) ==
      if Settings.enable_auto_catch then
          -- Cancel pending click if the target bobber becomes invalid OR if the closest bobber is no longer the target
          if catch_click_pending then
-             local target_is_still_valid = (catch_click_bobber_target and catch_click_bobber_target:is_valid())
-             local current_closest_is_target = (closest_bobber_nearby == catch_click_bobber_target)
+             -- Safely check if target is still valid
+             local target_is_still_valid = false
+             if catch_click_bobber_target and type(catch_click_bobber_target.is_valid) == 'function' then
+                 local success, result = pcall(function() return catch_click_bobber_target:is_valid() end)
+                 target_is_still_valid = success and result
+             end
+             
+             -- Safely compare objects
+             local current_closest_is_target = false
+             if closest_bobber_nearby and catch_click_bobber_target then
+                 current_closest_is_target = (tostring(closest_bobber_nearby) == tostring(catch_click_bobber_target))
+             end
 
              if not target_is_still_valid or not current_closest_is_target then
-                 if core_api.log then core_api.log("DEBUG: Cancelling pending catch click. Reason: " .. (not target_is_still_valid and "TargetInvalid " or "") .. (not current_closest_is_target and "TargetMismatch " or "")) end
+                 if core_api.log and Settings.verbose_logging then 
+                     core_api.log("DEBUG: Cancelling pending catch click. Reason: " .. (not target_is_still_valid and "TargetInvalid " or "") .. (not current_closest_is_target and "TargetMismatch " or "")) 
+                 end
                  catch_click_pending = false
                  catch_click_trigger_time = 0
                  catch_click_bobber_target = nil
@@ -472,9 +533,60 @@ local function on_update()
          end
      end -- End Auto Catch Logic block
 
-
-       -- == Auto Cast Logic (Handles Scheduled & Idle Recasts) ==
-       if Settings.enable_auto_cast then
+    -- == Loot Window Handling ==
+    if Settings.enable_auto_cast and core.game_ui and core.game_ui.get_loot_item_count then
+        local loot_count = core.game_ui.get_loot_item_count()
+        
+        if loot_count > 0 then
+            -- If we just detected loot, note the time and start looting
+            if not is_looting then
+                is_looting = true
+                last_loot_count = loot_count
+                loot_check_time = current_time - LOOT_CHECK_DELAY  -- Force immediate action on first check
+                if core_api.log then core_api.log("DEBUG: Loot window detected with " .. loot_count .. " items") end
+            end
+            
+            -- Check if we should try looting again (with delay between attempts)
+            if current_time >= loot_check_time + LOOT_CHECK_DELAY then
+                -- Always try to loot the first item (index 0)
+                if core.input and core.input.loot_item then
+                    core.input.loot_item(0)
+                    if core_api.log then core_api.log("DEBUG: Attempting to loot item (remaining: " .. loot_count .. ")") end
+                end
+                
+                -- Update the last loot check time
+                loot_check_time = current_time
+                
+                -- If we've been trying to loot the same number of items for too long, give up
+                if last_loot_count == loot_count then
+                    if current_time - loot_check_time > 2000 then  -- 2 seconds of no progress
+                        if core.input and core.input.close_loot then
+                            core.input.close_loot()
+                        end
+                        is_looting = false
+                        if core_api.log then core_api.log("WARNING: Giving up on looting after no progress") end
+                    end
+                else
+                    last_loot_count = loot_count
+                end
+            end
+            
+            -- Don't proceed to casting while looting
+            return
+        else
+            -- If we were looting but now there's no loot, we're done
+            if is_looting then
+                if core.input and core.input.close_loot then
+                    core.input.close_loot()
+                end
+                is_looting = false
+                if core_api.log then core_api.log("DEBUG: Looting complete, no more items") end
+            end
+        end
+    end
+    
+    -- == Auto Cast Logic (Handles Scheduled & Idle Recasts) ==
+    if Settings.enable_auto_cast then
         local should_try_cast = false
         local reason = ""
 
@@ -490,31 +602,31 @@ local function on_update()
         end
 
         -- If we should try casting, check if player is ready
-        if should_try_cast then
+        if should_try_cast and not is_looting then
             if not is_casting_now and not is_channeling_now and not is_moving then
                 local spell_id_to_cast = get_best_fishing_spell()
                 if spell_id_to_cast then
                     if core_api.log then core_api.log("DEBUG: Player ready. " .. reason .. " Attempting auto-cast of spell ID: " .. spell_id_to_cast) end
-                    input.cast_target_spell(spell_id_to_cast, player) -- Cast on self [cite: 51, 52, 53, 54]
-                    last_auto_cast_attempt_time = current_time -- Update last attempt time to reset cooldown
+                    input.cast_target_spell(spell_id_to_cast, player)
+                    last_auto_cast_attempt_time = current_time
                 else
-                    if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: " .. reason .. " No usable fishing spell found to auto-cast.") end
-                    last_auto_cast_attempt_time = current_time + 5 -- Add delay if no spell found
+                    if core_api.log and Settings.verbose_logging then 
+                        core_api.log("DEBUG: " .. reason .. " No usable fishing spell found to auto-cast.") 
+                    end
+                    last_auto_cast_attempt_time = current_time
                 end
-            else
-                -- Player was busy when cast was attempted (either scheduled or idle)
-                if core_api.log and Settings.verbose_logging then core_api.log("DEBUG: " .. reason .. " Player busy (casting/channeling/moving). Auto-cast skipped.") end
-                -- Reset last attempt time so it can try again on the next available tick after cooldown
-                last_auto_cast_attempt_time = current_time
+            -- Added check: If a cast was scheduled but player was busy when the time came, clear the schedule anyway
+            elseif next_cast_schedule_time > 0 and current_time >= next_cast_schedule_time then
+                if core_api.log then 
+                    core_api.log("DEBUG: Scheduled cast time met, but couldn't cast (player busy?). Clearing schedule.") 
+                end
+                next_cast_schedule_time = 0 -- Clear schedule if missed
             end
-        -- Added check: If a cast was scheduled but player was busy when the time came, clear the schedule anyway
-        elseif next_cast_schedule_time > 0 and current_time >= next_cast_schedule_time then
-             if core_api.log then core_api.log("DEBUG: Scheduled cast time met, but couldn't cast (player busy?). Clearing schedule.") end
-             next_cast_schedule_time = 0 -- Clear schedule if missed
         end
     else
         -- Ensure schedule is cleared if auto cast gets disabled
         next_cast_schedule_time = 0
+        is_looting = false
     end -- End Auto Cast Logic block
 
 end
@@ -528,7 +640,7 @@ local function on_render()
     if menu_elements then
         Settings.is_enabled = menu_elements.enable_script:get_state()
         Settings.max_range = menu_elements.range_slider:get() -- This is for pool drawing range
-        Settings.use_get_all_objects = menu_elements.use_all_objects_toggle:get_state()
+      --  Settings.use_get_all_objects = menu_elements.use_all_objects_toggle:get_state()
         Settings.show_pool_names = menu_elements.show_names_toggle:get_state()
         Settings.pool_name_text_size = menu_elements.pool_name_size_slider:get()
         Settings.enable_pool_glow = menu_elements.enable_glow_toggle:get_state()
@@ -657,7 +769,7 @@ local function menu_render()
     menu_elements.main_tree:render("Fisherman's Friend", function()
         menu_elements.enable_script:render("Enable Fisherman's Friend")
         menu_elements.range_slider:render("Max Draw Range (Pools)", Settings.max_range) -- Clarified tooltip
-        menu_elements.use_all_objects_toggle:render("Use 'Get All Objects' (SLOW?)", "Check this to use get_all_objects instead of get_visible_objects.")
+      --  menu_elements.use_all_objects_toggle:render("Use 'Get All Objects' (SLOW?)", "Check this to use get_all_objects instead of get_visible_objects.")
 
         menu_elements.visuals_tree:render("Visuals", function()
             menu_elements.show_names_toggle:render("Show Pool Names")
@@ -695,11 +807,11 @@ if core_api.register_on_render_callback and core_api.register_on_render_menu_cal
     core_api.register_on_render_menu_callback(menu_render)
     core_api.register_on_update_callback(on_update)
 
-    if core_api.log then core_api.log("Fishermans Friend v4.27 (Fixed Catch Delay + Cleanse Debug) Loaded Successfully!") end -- Version updated
-    if core_api.log_warning then core_api.log_warning("FishermansFriend: Bobber identified by Name 'Fishing Bobber' and proximity.") end
-    if core_api.log_warning then core_api.log_warning("FishermansFriend: Now using input.use_object() with fixed delay for catching.") end
-    if core_api.log_warning then core_api.log_warning("FishermansFriend: Verify Fishing Spell IDs in FISHING_SPELL_IDS table!") end
-    if core_api.log_warning then core_api.log_warning("FishermansFriend: Verify Ghoulfish IDs. No pcalls used.") end
+  --  if core_api.log then core_api.log("Fishermans Friend v4.27 (Fixed Catch Delay + Cleanse Debug) Loaded Successfully!") end -- Version updated
+   -- if core_api.log_warning then core_api.log_warning("FishermansFriend: Bobber identified by Name 'Fishing Bobber' and proximity.") end
+   -- if core_api.log_warning then core_api.log_warning("FishermansFriend: Now using input.use_object() with fixed delay for catching.") end
+  --  if core_api.log_warning then core_api.log_warning("FishermansFriend: Verify Fishing Spell IDs in FISHING_SPELL_IDS table!") end
+   -- if core_api.log_warning then core_api.log_warning("FishermansFriend: Verify Ghoulfish IDs. No pcalls used.") end
 else
     print("FishermansFriend: ERROR - Failed to register core callbacks (render, menu, or update).")
 end
